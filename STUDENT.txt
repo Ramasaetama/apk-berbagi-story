@@ -1,0 +1,13 @@
+Nama: [ISI NAMA ANDA]
+Email: [ISI EMAIL ANDA]
+ID Dicoding: [ISI ID DICODING ANDA]
+
+URL Deployment: [URL AKAN DIISI SETELAH DEPLOY KE GITHUB PAGES]
+
+Contoh:
+https://[username].github.io/[repository-name]/
+
+Catatan:
+- Pastikan untuk mengupdate file ini setelah melakukan deployment
+- URL harus dapat diakses secara publik
+- Pastikan aplikasi berfungsi dengan baik di URL tersebut
