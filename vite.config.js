@@ -21,6 +21,8 @@ export default defineConfig({
         main: resolve(__dirname, 'src', 'index.html'),
       },
     },
+    // Copy .nojekyll to dist
+    copyPublicDir: true,
   },
   
   resolve: {
