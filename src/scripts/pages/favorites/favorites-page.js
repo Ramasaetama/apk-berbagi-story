@@ -14,12 +14,14 @@ const FavoritesPage = {
           <div class="favorites-controls">
             <div class="search-box">
               <i class="fas fa-search"></i>
+              <label for="search-favorites" class="visually-hidden">Cari cerita favorit</label>
               <input 
                 type="text" 
                 id="search-favorites" 
                 placeholder="Cari cerita favorit..." 
-                aria-label="Cari cerita favorit"
+                aria-describedby="search-favorites-help"
               />
+              <span id="search-favorites-help" class="visually-hidden">Ketik untuk mencari cerita favorit berdasarkan nama atau deskripsi</span>
             </div>
             
             <div class="sort-controls">
@@ -128,7 +130,7 @@ const FavoritesPage = {
           
           <div class="story-content">
             <div class="story-header">
-              <h3>${story.name}</h3>
+              <h2>${story.name}</h2>
               <span class="favorite-badge" title="Favorit">
                 <i class="fas fa-heart"></i>
               </span>

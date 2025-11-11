@@ -249,7 +249,7 @@ export default class StoriesPage {
               <img src="${story.photoUrl}" alt="Foto cerita dari ${story.name}" loading="lazy">
             </div>
             <div class="story-content">
-              <h3 class="story-name">${story.name}</h3>
+              <h2 class="story-name">${story.name}</h2>
               <p class="story-description">${story.description}</p>
               <time datetime="${story.createdAt}">
                 ${new Date(story.createdAt).toLocaleDateString('id-ID', {

@@ -111,31 +111,25 @@ class PushNotificationHelper {
   async getVapidPublicKey() {
     try {
       // Get VAPID public key from Dicoding Story API
-      // Note: Based on Dicoding documentation, the VAPID key should be available
-      // For now, we'll use a placeholder. You need to get this from the API documentation
-      
-      // Try to fetch from API endpoint if available
       const token = localStorage.getItem('auth_token');
-      if (token) {
-        try {
-          const response = await fetch(`${CONFIG.BASE_URL}/push/vapid`, {
-            headers: {
-              'Authorization': `Bearer ${token}`,
-            },
-          });
-          
-          if (response.ok) {
-            const data = await response.json();
-            return data.publicKey;
-          }
-        } catch (error) {
-          console.log('Could not fetch VAPID key from API:', error);
-        }
+      if (!token) {
+        throw new Error('No authentication token available');
       }
 
-      // Fallback: Use the public VAPID key from Dicoding Story API documentation
-      // You MUST replace this with the actual VAPID public key from the API docs
-      return 'BL4vlMg7cgX4kwjkILQZEeCl7FPqLDL7c4i5kfQ5LkVwCCCTLcSCKfmXKvVkTJrQhQXz9UJ0KqF8NN8lFuUJwNI';
+      // Fetch VAPID key from API endpoint
+      const response = await fetch(`${CONFIG.BASE_URL}/push/vapid`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch VAPID key: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log('VAPID public key retrieved successfully');
+      return data.data.publicKey;
     } catch (error) {
       console.error('Error getting VAPID public key:', error);
       throw error;
@@ -144,22 +138,46 @@ class PushNotificationHelper {
 
   async sendSubscriptionToServer(subscription) {
     try {
-      // Send subscription to your backend server if you have one
-      // This is optional for the Dicoding submission
+      console.log('Sending subscription to server...');
       console.log('Subscription endpoint:', subscription.endpoint);
       
-      // For Dicoding Story API, you might need to send the subscription
       const token = localStorage.getItem('auth_token');
       if (!token) {
-        console.log('No auth token, skipping server subscription');
-        return;
+        console.log('No auth token, cannot subscribe to server');
+        throw new Error('Authentication required to subscribe to notifications');
       }
+
+      // Send subscription to Dicoding Story API
+      const response = await fetch(`${CONFIG.BASE_URL}/notifications/subscribe`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          endpoint: subscription.endpoint,
+          keys: {
+            p256dh: btoa(String.fromCharCode(...new Uint8Array(subscription.getKey('p256dh')))),
+            auth: btoa(String.fromCharCode(...new Uint8Array(subscription.getKey('auth')))),
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to subscribe to server notifications');
+      }
+
+      const data = await response.json();
+      console.log('Successfully subscribed to server notifications:', data);
 
       // Store subscription in localStorage as backup
       localStorage.setItem('push_subscription', JSON.stringify(subscription));
       
+      return data;
     } catch (error) {
       console.error('Error sending subscription to server:', error);
+      throw error;
     }
   }
 
@@ -225,11 +243,11 @@ class PushNotificationHelper {
     if (Notification.permission === 'granted' && this.registration) {
       this.registration.showNotification('Test Notifikasi', {
         body: 'Ini adalah notifikasi percobaan dari Berbagi Story',
-        icon: '/icons/icon-192x192.png',
-        badge: '/icons/icon-72x72.png',
+        icon: './icons/icon-192x192.png',
+        badge: './icons/icon-96x96.png',
         vibrate: [200, 100, 200],
         data: {
-          url: '/#/stories'
+          url: './#/stories'
         }
       });
     }

@@ -162,7 +162,7 @@ class StoriesView {
               </button>
             </div>
             <div class="story-content">
-              <h3 class="story-name"><i class="fas fa-user"></i> ${story.name}</h3>
+              <h2 class="story-name"><i class="fas fa-user" aria-hidden="true"></i> ${story.name}</h2>
               <p class="story-description">${story.description}</p>
               <time datetime="${story.createdAt}">
                 <i class="fas fa-calendar-alt"></i>

@@ -10,8 +10,17 @@ import pushNotificationHelper from './utils/pushNotification.js';
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', async () => {
     try {
-      const registration = await navigator.serviceWorker.register('/sw.js', {
-        scope: '/'
+      // Get base path from current location
+      const basePath = window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/') + 1) || '/';
+      
+      // Service worker path relative to base
+      const swPath = `${basePath}sw.js`;
+      
+      console.log('Registering service worker from:', swPath);
+      console.log('With scope:', basePath);
+      
+      const registration = await navigator.serviceWorker.register(swPath, {
+        scope: basePath
       });
       console.log('Service Worker registered successfully:', registration);
 
