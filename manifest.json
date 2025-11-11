@@ -2,32 +2,33 @@
   "name": "Berbagi Story - Dicoding",
   "short_name": "Berbagi Story",
   "description": "Aplikasi berbagi cerita dengan lokasi menggunakan Progressive Web App",
-  "start_url": "/",
+  "start_url": "./",
+  "scope": "./",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#007bff",
   "orientation": "portrait-primary",
   "icons": [
     {
-      "src": "/icons/icon-96x96.png",
+      "src": "./icons/icon-96x96.png",
       "sizes": "96x96",
       "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "/icons/icon-144x144.png",
+      "src": "./icons/icon-144x144.png",
       "sizes": "144x144",
       "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "/icons/icon-192x192.png",
+      "src": "./icons/icon-192x192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "/icons/icon-512x512.png",
+      "src": "./icons/icon-512x512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
@@ -38,10 +39,10 @@
       "name": "Lihat Stories",
       "short_name": "Stories",
       "description": "Lihat semua cerita yang dibagikan",
-      "url": "/#/stories",
+      "url": "./#/stories",
       "icons": [
         {
-          "src": "/icons/icon-96x96.png",
+          "src": "./icons/icon-96x96.png",
           "sizes": "96x96"
         }
       ]
@@ -50,10 +51,10 @@
       "name": "Tambah Story",
       "short_name": "Tambah",
       "description": "Bagikan cerita baru",
-      "url": "/#/add-story",
+      "url": "./#/add-story",
       "icons": [
         {
-          "src": "/icons/icon-96x96.png",
+          "src": "./icons/icon-96x96.png",
           "sizes": "96x96"
         }
       ]

@@ -1,17 +1,18 @@
 /* eslint-disable no-restricted-globals */
-const CACHE_NAME = 'berbagi-story-v1';
-const urlsToCache = [
-  '/',
-  '/index.html',
-  '/scripts/index.js',
-  '/styles/styles.css',
-  '/favicon.png',
-  '/manifest.json',
-  'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css',
-];
-
+const CACHE_NAME = 'berbagi-story-v2'; // Increment version
 const API_CACHE_NAME = 'api-cache-v1';
 const IMAGE_CACHE_NAME = 'image-cache-v1';
+
+// Minimal critical files to cache
+const urlsToCache = [
+  './',
+  './index.html',
+  './manifest.json',
+  './icons/icon-96x96.png',
+  './icons/icon-144x144.png',
+  './icons/icon-192x192.png',
+  './icons/icon-512x512.png',
+];
 
 // Install event - cache static assets
 self.addEventListener('install', (event) => {
@@ -20,9 +21,23 @@ self.addEventListener('install', (event) => {
     caches.open(CACHE_NAME)
       .then((cache) => {
         console.log('Service Worker: Caching files');
-        return cache.addAll(urlsToCache);
+        // Cache with error handling for each file
+        return Promise.all(
+          urlsToCache.map((url) => {
+            return cache.add(url).catch((error) => {
+              console.warn(`Failed to cache ${url}:`, error);
+              return null;
+            });
+          })
+        );
       })
-      .then(() => self.skipWaiting())
+      .then(() => {
+        console.log('Service Worker: All files cached');
+        return self.skipWaiting();
+      })
+      .catch((error) => {
+        console.error('Service Worker: Install failed:', error);
+      })
   );
 });
 
@@ -43,12 +58,22 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Fetch event - network first, fallback to cache for API calls
+// Fetch event - Cache all assets dynamically
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
 
-  // API requests - Network First strategy
+  // Skip chrome-extension and other non-http(s) requests
+  if (!request.url.startsWith('http')) {
+    return;
+  }
+
+  // Skip POST, PUT, DELETE requests - only cache GET
+  if (request.method !== 'GET') {
+    return;
+  }
+
+  // API requests - Network First strategy with cache fallback
   if (url.origin === 'https://story-api.dicoding.dev') {
     event.respondWith(
       fetch(request)
@@ -56,8 +81,8 @@ self.addEventListener('fetch', (event) => {
           // Clone the response
           const responseClone = response.clone();
           
-          // Cache successful GET requests
-          if (request.method === 'GET' && response.status === 200) {
+          // Cache successful responses
+          if (response.status === 200) {
             caches.open(API_CACHE_NAME).then((cache) => {
               cache.put(request, responseClone);
             });
@@ -71,12 +96,13 @@ self.addEventListener('fetch', (event) => {
             if (cachedResponse) {
               return cachedResponse;
             }
-            // Return offline page or error response
+            // Return offline response
             return new Response(JSON.stringify({ 
               error: true, 
               message: 'Offline - Data tidak tersedia' 
             }), {
-              headers: { 'Content-Type': 'application/json' }
+              headers: { 'Content-Type': 'application/json' },
+              status: 503
             });
           });
         })
@@ -85,7 +111,7 @@ self.addEventListener('fetch', (event) => {
   }
 
   // Image requests - Cache First strategy
-  if (request.destination === 'image') {
+  if (request.destination === 'image' || /\.(png|jpg|jpeg|svg|gif|webp|ico)$/i.test(url.pathname)) {
     event.respondWith(
       caches.match(request).then((cachedResponse) => {
         if (cachedResponse) {
@@ -101,22 +127,73 @@ self.addEventListener('fetch', (event) => {
             });
           }
           return response;
+        }).catch(() => {
+          // Return placeholder if offline
+          return caches.match('./icons/icon-192x192.png');
         });
       })
     );
     return;
   }
 
-  // Other requests - Cache First, fallback to Network
+  // For CSS, JS, fonts, and other static assets - Stale While Revalidate
+  if (
+    request.destination === 'style' || 
+    request.destination === 'script' || 
+    request.destination === 'font' ||
+    /\.(css|js|woff|woff2|ttf|otf)$/i.test(url.pathname)
+  ) {
+    event.respondWith(
+      caches.open(CACHE_NAME).then((cache) => {
+        return cache.match(request).then((cachedResponse) => {
+          const fetchPromise = fetch(request).then((networkResponse) => {
+            // Update cache with new version
+            if (networkResponse.status === 200) {
+              cache.put(request, networkResponse.clone());
+            }
+            return networkResponse;
+          }).catch(() => {
+            // Network failed, return cached if available
+            return cachedResponse;
+          });
+
+          // Return cached response immediately, but update cache in background
+          return cachedResponse || fetchPromise;
+        });
+      })
+    );
+    return;
+  }
+
+  // Other requests (HTML, documents) - Network First with cache fallback
   event.respondWith(
-    caches.match(request).then((cachedResponse) => {
-      return cachedResponse || fetch(request).catch(() => {
-        // If both cache and network fail, return offline page
-        if (request.destination === 'document') {
-          return caches.match('/index.html');
+    fetch(request)
+      .then((response) => {
+        // Cache successful responses
+        if (response.status === 200) {
+          const responseClone = response.clone();
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(request, responseClone);
+          });
         }
-      });
-    })
+        return response;
+      })
+      .catch(() => {
+        // Network failed, try cache
+        return caches.match(request).then((cachedResponse) => {
+          if (cachedResponse) {
+            return cachedResponse;
+          }
+          // If document request, return cached index.html
+          if (request.destination === 'document') {
+            return caches.match('./index.html');
+          }
+          return new Response('Offline', {
+            status: 503,
+            statusText: 'Service Unavailable'
+          });
+        });
+      })
   );
 });
 
@@ -127,11 +204,11 @@ self.addEventListener('push', (event) => {
   let notificationData = {
     title: 'Berbagi Story',
     body: 'Ada cerita baru!',
-    icon: '/icons/icon-192x192.png',
-    badge: '/icons/icon-72x72.png',
+    icon: './icons/icon-192x192.png',
+    badge: './icons/icon-96x96.png',
     tag: 'story-notification',
     data: {
-      url: '/#/stories'
+      url: './#/stories'
     }
   };
 
@@ -142,24 +219,24 @@ self.addEventListener('push', (event) => {
       notificationData = {
         title: data.title || 'Cerita Baru',
         body: data.body || data.message || 'Ada cerita baru yang dibagikan!',
-        icon: data.icon || '/icons/icon-192x192.png',
-        badge: '/icons/icon-72x72.png',
+        icon: data.icon || './icons/icon-192x192.png',
+        badge: './icons/icon-96x96.png',
         image: data.image || null,
         tag: data.tag || 'story-notification',
         data: {
-          url: data.url || '/#/stories',
+          url: data.url || './#/stories',
           storyId: data.storyId || null
         },
         actions: [
           {
             action: 'open',
             title: 'Lihat Detail',
-            icon: '/icons/icon-96x96.png'
+            icon: './icons/icon-96x96.png'
           },
           {
             action: 'close',
             title: 'Tutup',
-            icon: '/icons/icon-96x96.png'
+            icon: './icons/icon-96x96.png'
           }
         ],
         requireInteraction: false,
@@ -180,7 +257,7 @@ self.addEventListener('notificationclick', (event) => {
   console.log('Notification clicked', event);
   event.notification.close();
 
-  const urlToOpen = event.notification.data?.url || '/#/stories';
+  const urlToOpen = event.notification.data?.url || './#/stories';
 
   // Handle action buttons
   if (event.action === 'close') {
@@ -269,8 +346,8 @@ async function syncOfflineStories() {
     // Notify user
     self.registration.showNotification('Sinkronisasi Selesai', {
       body: `${offlineStories.length} cerita berhasil disinkronkan`,
-      icon: '/icons/icon-192x192.png',
-      badge: '/icons/icon-72x72.png'
+      icon: './icons/icon-192x192.png',
+      badge: './icons/icon-96x96.png'
     });
 
   } catch (error) {
