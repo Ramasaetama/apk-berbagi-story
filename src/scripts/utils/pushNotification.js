@@ -43,45 +43,69 @@ class PushNotificationHelper {
 
   async subscribe() {
     try {
+      console.log('=== SUBSCRIBE START ===');
+      
       if (!this.registration) {
+        console.log('Initializing service worker...');
         await this.init();
       }
 
       // Check if already subscribed
+      console.log('Checking existing subscription...');
       const existingSubscription = await this.registration.pushManager.getSubscription();
       if (existingSubscription) {
         console.log('Already subscribed to push notifications');
         this.subscription = existingSubscription;
+        
+        // Still send to server in case it's not registered there
+        try {
+          await this.sendSubscriptionToServer(existingSubscription);
+        } catch (error) {
+          console.warn('Failed to sync existing subscription with server:', error);
+        }
+        
         return existingSubscription;
       }
 
       // Request permission if not granted
+      console.log('Current permission:', Notification.permission);
       if (Notification.permission !== 'granted') {
+        console.log('Requesting notification permission...');
         const granted = await this.requestPermission();
         if (!granted) {
-          throw new Error('Permission denied for push notifications');
+          throw new Error('User denied notification permission');
         }
+        console.log('Permission granted!');
       }
 
-      // Get VAPID public key from API
+      // Get VAPID public key
+      console.log('Getting VAPID key...');
       const vapidPublicKey = await this.getVapidPublicKey();
+      console.log('VAPID key obtained');
       
       // Subscribe to push notifications
+      console.log('Subscribing to push service...');
       const subscription = await this.registration.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey: this.urlBase64ToUint8Array(vapidPublicKey),
       });
 
-      console.log('Push subscription successful:', subscription);
+      console.log('Push subscription successful!');
+      console.log('Subscription endpoint:', subscription.endpoint);
       this.subscription = subscription;
 
-      // Send subscription to server (optional, for backend integration)
+      // Send subscription to server
+      console.log('Sending subscription to server...');
       await this.sendSubscriptionToServer(subscription);
+      console.log('=== SUBSCRIBE COMPLETE ===');
 
       this.updateSubscriptionUI();
       return subscription;
     } catch (error) {
-      console.error('Error subscribing to push notifications:', error);
+      console.error('=== SUBSCRIBE ERROR ===');
+      console.error('Error details:', error);
+      console.error('Error message:', error.message);
+      console.error('Error stack:', error.stack);
       throw error;
     }
   }
@@ -136,8 +160,6 @@ class PushNotificationHelper {
   }
 
   async getVapidPublicKey() {
-    // VAPID public key dari dokumentasi Dicoding Story API
-    // Endpoint /push/vapid tidak tersedia, jadi gunakan hardcoded value
     return 'BCCs2eonMI-6H2ctvFaWg-UYdDv387Vno_bzUzALpB442r2lCnsHmtrx8biyPi_E-1fSGABK_Qs_GlvPoJJqxbk';
   }
 
@@ -156,39 +178,62 @@ class PushNotificationHelper {
       const p256dh = btoa(String.fromCharCode(...new Uint8Array(subscription.getKey('p256dh'))));
       const auth = btoa(String.fromCharCode(...new Uint8Array(subscription.getKey('auth'))));
 
-      // Send subscription ke Dicoding Story API sesuai dokumentasi
-      // Format: { endpoint, keys: { p256dh, auth } }
-      const response = await fetch(`${CONFIG.BASE_URL}/notifications/subscribe`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          endpoint: subscription.endpoint,
-          keys: {
-            p256dh: p256dh,
-            auth: auth,
-          },
-        }),
+      console.log('Payload being sent:', {
+        endpoint: subscription.endpoint.substring(0, 50) + '...',
+        keys: { p256dh: p256dh.substring(0, 20) + '...', auth: auth.substring(0, 20) + '...' }
       });
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ message: 'Unknown error' }));
-        console.error('Subscribe error:', errorData);
-        throw new Error(errorData.message || `Failed to subscribe: ${response.status}`);
+      // Add timeout untuk request
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
+
+      try {
+        // Send subscription ke Dicoding Story API sesuai dokumentasi
+        // Format: { endpoint, keys: { p256dh, auth } }
+        const response = await fetch(`${CONFIG.BASE_URL}/notifications/subscribe`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            endpoint: subscription.endpoint,
+            keys: {
+              p256dh: p256dh,
+              auth: auth,
+            },
+          }),
+          signal: controller.signal
+        });
+
+        clearTimeout(timeoutId);
+
+        console.log('Server response status:', response.status);
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({ message: 'Unknown error' }));
+          console.error('Subscribe error response:', errorData);
+          throw new Error(errorData.message || `Failed to subscribe: ${response.status} ${response.statusText}`);
+        }
+
+        const data = await response.json();
+        console.log('Successfully subscribed to server notifications:', data);
+
+        // Store subscription in localStorage as backup
+        localStorage.setItem('push_subscription', JSON.stringify({
+          endpoint: subscription.endpoint,
+          subscribedAt: new Date().toISOString()
+        }));
+        
+        return data;
+      } catch (fetchError) {
+        clearTimeout(timeoutId);
+        
+        if (fetchError.name === 'AbortError') {
+          throw new Error('Request timeout - Server tidak merespon dalam 15 detik');
+        }
+        throw fetchError;
       }
-
-      const data = await response.json();
-      console.log('Successfully subscribed to server notifications:', data);
-
-      // Store subscription in localStorage as backup
-      localStorage.setItem('push_subscription', JSON.stringify({
-        endpoint: subscription.endpoint,
-        subscribedAt: new Date().toISOString()
-      }));
-      
-      return data;
     } catch (error) {
       console.error('Error sending subscription to server:', error);
       throw error;
