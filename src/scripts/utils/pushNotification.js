@@ -93,11 +93,38 @@ class PushNotificationHelper {
         return true;
       }
 
+      // Unsubscribe from server first
+      const token = localStorage.getItem('auth_token');
+      if (token) {
+        try {
+          const response = await fetch(`${CONFIG.BASE_URL}/notifications/subscribe`, {
+            method: 'DELETE',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              endpoint: this.subscription.endpoint
+            }),
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            console.log('Server unsubscribe response:', data);
+          }
+        } catch (error) {
+          console.error('Error unsubscribing from server:', error);
+          // Continue with local unsubscribe even if server fails
+        }
+      }
+
+      // Unsubscribe locally
       const successful = await this.subscription.unsubscribe();
       
       if (successful) {
         console.log('Successfully unsubscribed from push notifications');
         this.subscription = null;
+        localStorage.removeItem('push_subscription');
         this.updateSubscriptionUI();
       }
 
@@ -109,31 +136,9 @@ class PushNotificationHelper {
   }
 
   async getVapidPublicKey() {
-    try {
-      // Get VAPID public key from Dicoding Story API
-      const token = localStorage.getItem('auth_token');
-      if (!token) {
-        throw new Error('No authentication token available');
-      }
-
-      // Fetch VAPID key from API endpoint
-      const response = await fetch(`${CONFIG.BASE_URL}/push/vapid`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-      
-      if (!response.ok) {
-        throw new Error(`Failed to fetch VAPID key: ${response.status}`);
-      }
-
-      const data = await response.json();
-      console.log('VAPID public key retrieved successfully');
-      return data.data.publicKey;
-    } catch (error) {
-      console.error('Error getting VAPID public key:', error);
-      throw error;
-    }
+    // VAPID public key dari dokumentasi Dicoding Story API
+    // Endpoint /push/vapid tidak tersedia, jadi gunakan hardcoded value
+    return 'BCCs2eonMI-6H2ctvFaWg-UYdDv387Vno_bzUzALpB442r2lCnsHmtrx8biyPi_E-1fSGABK_Qs_GlvPoJJqxbk';
   }
 
   async sendSubscriptionToServer(subscription) {
@@ -144,10 +149,15 @@ class PushNotificationHelper {
       const token = localStorage.getItem('auth_token');
       if (!token) {
         console.log('No auth token, cannot subscribe to server');
-        throw new Error('Authentication required to subscribe to notifications');
+        throw new Error('Authentication required to subscribe to notifications. Please login first.');
       }
 
-      // Send subscription to Dicoding Story API
+      // Konversi keys ke base64 sesuai format API
+      const p256dh = btoa(String.fromCharCode(...new Uint8Array(subscription.getKey('p256dh'))));
+      const auth = btoa(String.fromCharCode(...new Uint8Array(subscription.getKey('auth'))));
+
+      // Send subscription ke Dicoding Story API sesuai dokumentasi
+      // Format: { endpoint, keys: { p256dh, auth } }
       const response = await fetch(`${CONFIG.BASE_URL}/notifications/subscribe`, {
         method: 'POST',
         headers: {
@@ -157,22 +167,26 @@ class PushNotificationHelper {
         body: JSON.stringify({
           endpoint: subscription.endpoint,
           keys: {
-            p256dh: btoa(String.fromCharCode(...new Uint8Array(subscription.getKey('p256dh')))),
-            auth: btoa(String.fromCharCode(...new Uint8Array(subscription.getKey('auth')))),
+            p256dh: p256dh,
+            auth: auth,
           },
         }),
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to subscribe to server notifications');
+        const errorData = await response.json().catch(() => ({ message: 'Unknown error' }));
+        console.error('Subscribe error:', errorData);
+        throw new Error(errorData.message || `Failed to subscribe: ${response.status}`);
       }
 
       const data = await response.json();
       console.log('Successfully subscribed to server notifications:', data);
 
       // Store subscription in localStorage as backup
-      localStorage.setItem('push_subscription', JSON.stringify(subscription));
+      localStorage.setItem('push_subscription', JSON.stringify({
+        endpoint: subscription.endpoint,
+        subscribedAt: new Date().toISOString()
+      }));
       
       return data;
     } catch (error) {

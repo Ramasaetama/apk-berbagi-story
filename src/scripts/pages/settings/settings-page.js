@@ -4,6 +4,10 @@ import dbHelper from '../../utils/indexedDB.js';
 
 const SettingsPage = {
   async render() {
+    // Check if user is logged in
+    const token = localStorage.getItem('auth_token');
+    const isLoggedIn = !!token;
+    
     return `
       <div class="settings-page">
         <div class="container">
@@ -20,34 +24,49 @@ const SettingsPage = {
                 Terima notifikasi ketika ada cerita baru yang dibagikan
               </p>
 
-              <div class="setting-item">
-                <div class="setting-info">
-                  <label for="push-notification-toggle">
-                    <strong>Aktifkan Notifikasi Push</strong>
-                    <span class="setting-description">
-                      Dapatkan pemberitahuan real-time tentang cerita baru
-                    </span>
-                  </label>
+              ${!isLoggedIn ? `
+                <div class="alert alert-warning">
+                  <i class="fas fa-exclamation-triangle"></i>
+                  <div>
+                    <strong>Login Diperlukan</strong>
+                    <p>Anda harus login terlebih dahulu untuk mengaktifkan notifikasi push.</p>
+                    <a href="#/login" class="btn btn-primary btn-sm">
+                      <i class="fas fa-sign-in-alt"></i> Login Sekarang
+                    </a>
+                  </div>
                 </div>
-                <div class="setting-control">
-                  <label class="toggle-switch">
-                    <input 
-                      type="checkbox" 
-                      id="push-notification-toggle"
-                      ${pushNotificationHelper.isSubscribed() ? 'checked' : ''}
-                    />
-                    <span class="toggle-slider"></span>
-                  </label>
+              ` : `
+                <div class="alert alert-info">
+                  <i class="fas fa-info-circle"></i>
+                  <div>
+                    <p><strong>Cara Kerja Push Notification:</strong></p>
+                    <ol>
+                      <li>Klik tombol "Subscribe" untuk mendaftar notifikasi</li>
+                      <li>Izinkan notifikasi saat browser meminta</li>
+                      <li>Tambahkan story baru untuk memicu notifikasi</li>
+                      <li>Notifikasi akan muncul otomatis dari server</li>
+                    </ol>
+                  </div>
                 </div>
-              </div>
 
-              <div id="notification-status" class="notification-status">
-                ${this.getNotificationStatusHTML()}
-              </div>
+                <div class="notification-controls">
+                  <button id="subscribe-notification" class="btn btn-primary ${pushNotificationHelper.isSubscribed() ? 'hidden' : ''}">
+                    <i class="fas fa-bell"></i> Subscribe Notifikasi
+                  </button>
+                  
+                  <button id="unsubscribe-notification" class="btn btn-warning ${!pushNotificationHelper.isSubscribed() ? 'hidden' : ''}">
+                    <i class="fas fa-bell-slash"></i> Unsubscribe Notifikasi
+                  </button>
 
-              <button id="test-notification" class="btn btn-secondary" ${!pushNotificationHelper.isSubscribed() ? 'disabled' : ''}>
-                <i class="fas fa-vial"></i> Coba Notifikasi
-              </button>
+                  <button id="test-notification" class="btn btn-secondary ${!pushNotificationHelper.isSubscribed() ? 'disabled' : ''}" ${!pushNotificationHelper.isSubscribed() ? 'disabled' : ''}>
+                    <i class="fas fa-vial"></i> Coba Notifikasi
+                  </button>
+                </div>
+
+                <div id="notification-status" class="notification-status">
+                  ${this.getNotificationStatusHTML()}
+                </div>
+              `}
             </div>
 
             <!-- Storage Info -->
@@ -233,22 +252,19 @@ const SettingsPage = {
   },
 
   initializeEventListeners() {
-    // Push notification toggle
-    const pushToggle = document.getElementById('push-notification-toggle');
-    if (pushToggle) {
-      pushToggle.addEventListener('change', async (e) => {
-        const enabled = e.target.checked;
-        
-        try {
-          if (enabled) {
-            await this.enablePushNotifications();
-          } else {
-            await this.disablePushNotifications();
-          }
-        } catch (error) {
-          console.error('Error toggling push notifications:', error);
-          e.target.checked = !enabled; // Revert toggle
-        }
+    // Subscribe button
+    const subscribeButton = document.getElementById('subscribe-notification');
+    if (subscribeButton) {
+      subscribeButton.addEventListener('click', async () => {
+        await this.enablePushNotifications();
+      });
+    }
+
+    // Unsubscribe button
+    const unsubscribeButton = document.getElementById('unsubscribe-notification');
+    if (unsubscribeButton) {
+      unsubscribeButton.addEventListener('click', async () => {
+        await this.disablePushNotifications();
       });
     }
 
@@ -272,8 +288,8 @@ const SettingsPage = {
   async enablePushNotifications() {
     try {
       const loadingSwal = Swal.fire({
-        title: 'Mengaktifkan Notifikasi...',
-        text: 'Mohon tunggu',
+        title: 'Subscribing...',
+        text: 'Mohon tunggu, mendaftarkan notifikasi push',
         allowOutsideClick: false,
         allowEscapeKey: false,
         showConfirmButton: false,
@@ -288,13 +304,26 @@ const SettingsPage = {
 
       await Swal.fire({
         icon: 'success',
-        title: 'Berhasil!',
-        text: 'Notifikasi push telah diaktifkan',
-        timer: 2000,
-        showConfirmButton: false,
-        toast: true,
-        position: 'top-end'
+        title: 'Berhasil Subscribe!',
+        html: `
+          <p>Notifikasi push telah diaktifkan.</p>
+          <p><strong>Cara Test:</strong></p>
+          <ol style="text-align: left;">
+            <li>Tambahkan story baru di menu "Tambah Story"</li>
+            <li>Notifikasi akan muncul otomatis dari server</li>
+          </ol>
+        `,
+        confirmButtonColor: '#007bff'
       });
+
+      // Update UI
+      const subscribeBtn = document.getElementById('subscribe-notification');
+      const unsubscribeBtn = document.getElementById('unsubscribe-notification');
+      const testBtn = document.getElementById('test-notification');
+      
+      if (subscribeBtn) subscribeBtn.classList.add('hidden');
+      if (unsubscribeBtn) unsubscribeBtn.classList.remove('hidden');
+      if (testBtn) testBtn.disabled = false;
 
       // Update status display
       const statusContainer = document.getElementById('notification-status');
@@ -302,19 +331,13 @@ const SettingsPage = {
         statusContainer.innerHTML = this.getNotificationStatusHTML();
       }
 
-      // Enable test button
-      const testButton = document.getElementById('test-notification');
-      if (testButton) {
-        testButton.disabled = false;
-      }
-
     } catch (error) {
       console.error('Error enabling push notifications:', error);
       
       Swal.fire({
         icon: 'error',
-        title: 'Gagal',
-        text: 'Gagal mengaktifkan notifikasi push. ' + error.message,
+        title: 'Gagal Subscribe',
+        text: error.message || 'Gagal mengaktifkan notifikasi push',
         confirmButtonColor: '#007bff'
       });
 
@@ -324,11 +347,24 @@ const SettingsPage = {
 
   async disablePushNotifications() {
     try {
+      const result = await Swal.fire({
+        title: 'Unsubscribe Notifikasi?',
+        text: 'Anda tidak akan menerima notifikasi push lagi',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#dc3545',
+        cancelButtonColor: '#6c757d',
+        confirmButtonText: '<i class="fas fa-bell-slash"></i> Ya, Unsubscribe',
+        cancelButtonText: '<i class="fas fa-times"></i> Batal'
+      });
+
+      if (!result.isConfirmed) return;
+
       await pushNotificationHelper.unsubscribe();
 
       await Swal.fire({
         icon: 'info',
-        title: 'Nonaktif',
+        title: 'Berhasil Unsubscribe',
         text: 'Notifikasi push telah dinonaktifkan',
         timer: 2000,
         showConfirmButton: false,
@@ -336,20 +372,29 @@ const SettingsPage = {
         position: 'top-end'
       });
 
+      // Update UI
+      const subscribeBtn = document.getElementById('subscribe-notification');
+      const unsubscribeBtn = document.getElementById('unsubscribe-notification');
+      const testBtn = document.getElementById('test-notification');
+      
+      if (subscribeBtn) subscribeBtn.classList.remove('hidden');
+      if (unsubscribeBtn) unsubscribeBtn.classList.add('hidden');
+      if (testBtn) testBtn.disabled = true;
+
       // Update status display
       const statusContainer = document.getElementById('notification-status');
       if (statusContainer) {
         statusContainer.innerHTML = this.getNotificationStatusHTML();
       }
 
-      // Disable test button
-      const testButton = document.getElementById('test-notification');
-      if (testButton) {
-        testButton.disabled = true;
-      }
-
     } catch (error) {
       console.error('Error disabling push notifications:', error);
+      Swal.fire({
+        icon: 'error',
+        title: 'Gagal',
+        text: 'Gagal unsubscribe notifikasi',
+        confirmButtonColor: '#007bff'
+      });
       throw error;
     }
   },
