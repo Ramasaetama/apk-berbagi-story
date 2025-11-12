@@ -188,7 +188,6 @@ class PushNotificationHelper {
       const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
 
       try {
-        // Send subscription ke Dicoding Story API sesuai dokumentasi
         // Format: { endpoint, keys: { p256dh, auth } }
         const response = await fetch(`${CONFIG.BASE_URL}/notifications/subscribe`, {
           method: 'POST',
